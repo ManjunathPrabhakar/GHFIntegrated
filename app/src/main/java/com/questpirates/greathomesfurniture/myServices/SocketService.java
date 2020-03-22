@@ -5,6 +5,7 @@ import android.app.Service;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -16,8 +17,15 @@ import androidx.fragment.app.Fragment;
 
 import com.github.nkzawa.emitter.Emitter;
 import com.github.nkzawa.socketio.client.Socket;
+import com.questpirates.greathomesfurniture.ARMainActivity;
+import com.questpirates.greathomesfurniture.ItemFullActivity;
 import com.questpirates.greathomesfurniture.MainActivity;
 import com.questpirates.greathomesfurniture.R;
+import com.questpirates.greathomesfurniture.SFBPojo;
+import com.questpirates.greathomesfurniture.ScanVision.IntelliVisionActivity;
+import com.questpirates.greathomesfurniture.ScanVision.ScanQRActivity;
+import com.questpirates.greathomesfurniture.SendJavaEmail;
+import com.questpirates.greathomesfurniture.arcore.ArCoreHome;
 import com.questpirates.greathomesfurniture.utils.SocketInstance;
 
 import org.json.JSONException;
@@ -28,8 +36,16 @@ import java.util.Objects;
 
 public class SocketService extends Service {
 
+    public static final String BROADCAST_COLOR = "HELLO";
+    public static final String BROADCAST_MAIN = "MAIN";
+    public static final String BROADCAST_MAINCHAIRS = "MCHAIRS";
+    public static final String BROADCAST_MAINDESKS = "MDESKS";
+    public static final String BROADCAST_MAINTABLES = "MTABLES";
     private Socket socket;
+    private ActivityManager am;
+    private ComponentName cn;
     Handler handler;
+    Intent i;
 
     public SocketService() {
 
@@ -37,6 +53,7 @@ public class SocketService extends Service {
 
     @Override
     public IBinder onBind(Intent intent) {
+
         return null;
     }
 
@@ -44,17 +61,12 @@ public class SocketService extends Service {
     public void onCreate() {
         super.onCreate();
 
-        ActivityManager am = (ActivityManager) this.getSystemService(Context.ACTIVITY_SERVICE);
-        ComponentName cn = am.getRunningTasks(1).get(0).topActivity;
-        Log.d("ActivityName", cn.getClassName());
-        Fragment fr = MainActivity.fragmentManager.findFragmentById(R.id.fragment_container);
-        String fragmentName = fr.getClass().getSimpleName();
-        Log.d("FragmentName", fragmentName);
 
-        checkActivity();
+        //checkActivity();
 
         Log.d("SocketService", "Started");
 
+        // Get socket instance from SocketInstance class and connect to it
         try {
             SocketInstance app = (SocketInstance) getApplication();
             socket = app.getSocket();
@@ -74,6 +86,7 @@ public class SocketService extends Service {
 
         // Listen socket event
         socket.on("Change renderable color", socketListener);
+        socket.on("Open Activity", socketListener);
     }
 
     // Listener for socket event - socketListener
@@ -85,10 +98,8 @@ public class SocketService extends Service {
             Handler requestSuccessHandler = new Handler(Looper.getMainLooper());
             requestSuccessHandler.post(() -> {
                 String intentName = "";
-                String color = "";
                 try {
                     intentName = data.getString("intentName");
-                    color = data.getString("color");
                     Log.d("SocketService", String.valueOf(data));
                 } catch (JSONException e) {
                     Log.d("socket-data-parse-error", Objects.requireNonNull(e.getMessage()));
@@ -99,51 +110,187 @@ public class SocketService extends Service {
                     dialog.show();
                 }
 
-                if (intentName.equalsIgnoreCase("change-obj-color")) {
-                    //changeColorEvent(color);
-                    Log.d("SocketService", intentName + "");
+//                if (intentName.equalsIgnoreCase("change-obj-color")) {
+//
+//                }
+
+                am = (ActivityManager) getApplicationContext().getSystemService(Context.ACTIVITY_SERVICE);
+                cn = am.getRunningTasks(1).get(0).topActivity;
+                Log.d("ActivityName", cn.getClassName());
+                Fragment fr = MainActivity.fragmentManager.findFragmentById(R.id.fragment_container);
+                String fragmentName = fr.getClass().getSimpleName();
+                Log.d("FragmentName", fragmentName);
+
+                String activityName = "";
+                try {
+                    activityName = data.getString("activityName");
+                } catch (JSONException e) {
+                    Log.d("ActivityNameError", "Error " + e);
                 }
-                switch (intentName.toLowerCase()){
+
+
+                switch (intentName.toLowerCase()) {
 
                     // open Activities
-                    case "open-ar" : //Code to open AR Activity
-                    break;
-                    case "open-iv" : //Code to open Intelligent Vision Activity
-                        break;
-                    case "open-qr" : //Code to open QR Activity
-                        break;
-                    case "open-cart" : //Code to open Main Activity - Cart Fragment
-                        break;
-                    case "open-home" : //Code to open Main Activity - Home Fragment
-                        break;
-                    case "open-profile" : //Code to open Main Activity - Profile Fragement
-                        break;
-                    case "open-chat" : //Code to open Main Activity - chat Fragement
+                    case "open-activity": //Code to open AR Activity
+                        switch (activityName.toLowerCase()) {
+                            case "ar":
+                                if ((!cn.getShortClassName().equalsIgnoreCase(".ArCoreHome"))) {
+                                    Intent act = new Intent(getApplicationContext(), ArCoreHome.class);
+                                    act.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    startActivity(act);
+                                }
+                                break;
+                            case "iv":
+                                if ((!cn.getShortClassName().equalsIgnoreCase(".IntelliVisionActivity"))) {
+                                    Intent act = new Intent(getApplicationContext(), IntelliVisionActivity.class);
+                                    act.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    startActivity(act);
+                                }
+                                break;
+                            case "qr":
+                                if ((!cn.getShortClassName().equalsIgnoreCase(".ScanQRActivity"))) {
+                                    Intent act = new Intent(getApplicationContext(), ScanQRActivity.class);
+                                    act.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    startActivity(act);
+                                }
+                                break;
+                            case "cart": //Code to open Main Activity - Cart Fragment
+                                if ((!cn.getShortClassName().equalsIgnoreCase(".MainActivity"))) {
+                                    Intent act = new Intent(getApplicationContext(), MainActivity.class);
+                                    act.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    act.putExtra("fragment", "cart");
+                                    startActivity(act);
+                                } else {
+                                    i = new Intent(BROADCAST_MAIN);
+                                    i.putExtra("fragment", "cart");
+                                    sendBroadcast(i);
+                                }
+                                break;
+                            case "home": //Code to open Main Activity - Home Fragment
+                                if ((!cn.getShortClassName().equalsIgnoreCase(".MainActivity"))) {
+                                    Intent act = new Intent(getApplicationContext(), MainActivity.class);
+                                    act.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    act.putExtra("fragment", "home");
+                                    startActivity(act);
+                                } else {
+                                    i = new Intent(BROADCAST_MAIN);
+                                    i.putExtra("fragment", "home");
+                                    sendBroadcast(i);
+                                }
+                                break;
+                            case "profile": //Code to open Main Activity - Profile Fragement
+                                if ((!cn.getShortClassName().equalsIgnoreCase(".MainActivity"))) {
+                                    Intent act = new Intent(getApplicationContext(), MainActivity.class);
+                                    act.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    act.putExtra("fragment", "profile");
+                                    startActivity(act);
+                                } else {
+                                    i = new Intent(BROADCAST_MAIN);
+                                    i.putExtra("fragment", "profile");
+                                    sendBroadcast(i);
+                                }
+                                break;
+                            case "chat": //Code to open Main Activity - chat Fragement
+                                if ((!cn.getShortClassName().equalsIgnoreCase(".MainActivity"))) {
+                                    Intent act = new Intent(getApplicationContext(), MainActivity.class);
+                                    act.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    act.putExtra("fragment", "chat");
+                                    startActivity(act);
+                                } else {
+                                    i = new Intent(BROADCAST_MAIN);
+                                    i.putExtra("fragment", "chat");
+                                    sendBroadcast(i);
+                                }
+                                break;
+                            case "show chairs": //Main Activity - Home Fragement - Chairs tab
+                                if ((!cn.getShortClassName().equalsIgnoreCase(".MainActivity"))) {
+                                    Intent act = new Intent(getApplicationContext(), MainActivity.class);
+                                    act.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    act.putExtra("fragment", "homechairs");
+                                    startActivity(act);
+                                } else {
+                                    i = new Intent(BROADCAST_MAINCHAIRS);
+                                    i.putExtra("fragment", "homechairs");
+                                    sendBroadcast(i);
+                                }
+                                break;
+                            case "show desks": //Main Activity - Home Fragement - desks tab
+                                if ((!cn.getShortClassName().equalsIgnoreCase(".MainActivity"))) {
+                                    Intent act = new Intent(getApplicationContext(), MainActivity.class);
+                                    act.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    act.putExtra("fragment", "homedesks");
+                                    startActivity(act);
+                                } else {
+                                    i = new Intent(BROADCAST_MAINDESKS);
+                                    i.putExtra("fragment", "homedesks");
+                                    sendBroadcast(i);
+                                }
+                                break;
+                            case "show tables": //Main Activity - Home Fragement - tables tab
+                                if ((!cn.getShortClassName().equalsIgnoreCase(".MainActivity"))) {
+                                    Intent act = new Intent(getApplicationContext(), MainActivity.class);
+                                    act.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    act.putExtra("fragment", "hometables");
+                                    startActivity(act);
+                                } else {
+                                    i = new Intent(BROADCAST_MAINTABLES);
+                                    i.putExtra("fragment", "hometables");
+                                    sendBroadcast(i);
+                                }
+                                break;
+
+                            case "show this in ar": //Main Activity - Home Fragement - tables tab
+                                if ((!cn.getShortClassName().equalsIgnoreCase(".ARMainActivity"))) {
+                                    Intent act = new Intent(getApplicationContext(), ARMainActivity.class);
+                                    act.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    act.setData(Uri.parse(SFBPojo.getSFBFile()));
+                                    startActivity(act);
+                                }
+                                break;
+                            case "connect liveagent": //connect to live agent, trigger email
+                                if ((cn.getShortClassName().equalsIgnoreCase(".ItemFullActivity")) ||
+                                        (cn.getShortClassName().equalsIgnoreCase(".ARMainActivity"))) {
+                                    SendJavaEmail sendJavaEmail = new SendJavaEmail(
+//                                            "manjunath189@gmail.com,lakshyadev@live.com" +
+                                            "manjunath.prabhakar@wipro.com,kishore.kumar35@wipro.com,lakshya.singh@wipro.com,sudhanshu.raj@wipro.com",
+                                            "GHF Support",
+                                            "",
+                                            "");
+                                    sendJavaEmail.sendEmail();
+                                }
+                                break;
+                        }
+
                         break;
 
-                    // do tasks & ask queations
-                    case "check-warrenty" : //respond some random warranty info
+
+                    // intent - actions - do something in opened activities
+                    case "check-warrenty": //respond some random warranty info
                         break;
-                    case "check-productinfo" : //respond some random product info
+                    case "check-productinfo": //respond some random product info
                         break;
-                    case "change-color" : //change item color
+                    case "change-obj-color": //change AR renderable item color in AR activity
+                        String color = null;
+                        try {
+                            color = data.getString("color");
+                        } catch (JSONException e) {
+                            e.printStackTrace();
+                        }
+                        i = new Intent(BROADCAST_COLOR);
+                        i.putExtra("color", color);
+                        sendBroadcast(i);
+                        Log.d("SocketServiceColor", intentName + color);
                         break;
-                    case "connect-liveagent" : //connect to live agent, trigger email
+
+                    case "check-price": ////respond some random price
                         break;
-                    case "check-price" : ////respond some random price
-                        break;
-                    case "whats-oncart" : //respond with contents of cart
-                        break;
-                    case "show-chairs" : //Main Activity - Home Fragement - Chairs tab
-                        break;
-                    case "show-desks" : //Main Activity - Home Fragement - desks tab
-                        break;
-                    case "show-tables" : //Main Activity - Home Fragement - tables tab
+                    case "whats-oncart": //respond with contents of cart
                         break;
 
 
-
-                    default: Toast.makeText(getApplicationContext(),"Nothing Here!!!!", Toast.LENGTH_LONG).show();
+                    default:
+                        Toast.makeText(getApplicationContext(), "Nothing Here!!!!", Toast.LENGTH_LONG).show();
                 }
                 // add the message to view
                 //addMessage(username, message);
